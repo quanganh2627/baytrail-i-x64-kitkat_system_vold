@@ -77,7 +77,12 @@ dev_t DirectVolume::getDiskDevice() {
 
 dev_t DirectVolume::getShareDevice() {
     if (mPartIdx != -1) {
-        return MKDEV(mDiskMajor, mPartIdx);
+        /*
+         * If more than one mass storage devices are mounted, mDiskMinor should be added.
+         * For example, the first device is 179:0-179:7, the second is 179:8-179:9.
+         * If system want to export 179:9, the minor index of MKDEV should be 8+1.
+         */
+        return MKDEV(mDiskMajor, mDiskMinor + mPartIdx);
     } else {
         return MKDEV(mDiskMajor, mDiskMinor);
     }
