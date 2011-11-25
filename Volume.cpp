@@ -250,9 +250,7 @@ int Volume::formatVol(bool wipe) {
     bool formatEntireDevice = (mPartIdx == -1);
     char devicePath[255];
     dev_t diskNode = getDiskDevice();
-    dev_t partNode =
-        MKDEV(MAJOR(diskNode),
-              MINOR(diskNode) + (formatEntireDevice ? 1 : mPartIdx));
+    dev_t partNode = MKDEV(MAJOR(diskNode), (formatEntireDevice ? 1 : MINOR(diskNode) + mPartIdx));
 
     setState(Volume::State_Formatting);
 
@@ -459,6 +457,15 @@ int Volume::mountVol() {
 
         setState(Volume::State_Mounted);
         mCurrentlyMountedKdev = deviceNodes[i];
+
+        /*
+         * When the "part" in vold.fstab is set as "auto", mPartIdx will be -1.
+         * And USB mass storage will export entire disk(all the partitions) to host PC.
+         * So update the mPartIdx to export only one proper FAT FS partition.
+         */
+        if (mPartIdx == -1)
+            mPartIdx = i + 1;
+
         return 0;
     }
 
