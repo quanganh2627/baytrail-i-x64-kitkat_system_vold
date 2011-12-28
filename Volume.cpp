@@ -281,7 +281,9 @@ int Volume::formatVol(bool wipe) {
     ret = 0;
 
 err:
-    setState(Volume::State_Idle);
+    if ((getState() != Volume::State_NoMedia))
+        setState(Volume::State_Idle);
+
     return ret;
 }
 
@@ -419,7 +421,12 @@ int Volume::mountVol() {
         SLOGI("%s being considered for volume %s\n", devicePath, getLabel());
 
         errno = 0;
-        setState(Volume::State_Checking);
+
+        if ((getState() == Volume::State_NoMedia)) {
+            errno = ENODEV;
+            return -1;
+        } else
+            setState(Volume::State_Checking);
 
         if (Fat::check(devicePath)) {
             if (errno == ENODATA) {
@@ -429,7 +436,10 @@ int Volume::mountVol() {
             errno = EIO;
             /* Badness - abort the mount */
             SLOGE("%s failed FS checks (%s)", devicePath, strerror(errno));
-            setState(Volume::State_Idle);
+            if ((getState() == Volume::State_NoMedia))
+                errno = ENODEV;
+            else
+                setState(Volume::State_Idle);
             return -1;
         }
 
@@ -447,7 +457,8 @@ int Volume::mountVol() {
         if (providesAsec && mountAsecExternal() != 0) {
             SLOGE("Failed to mount secure area (%s)", strerror(errno));
             umount(getMountpoint());
-            setState(Volume::State_Idle);
+            if ((getState() != Volume::State_NoMedia))
+                setState(Volume::State_Idle);
             return -1;
         }
 
@@ -470,7 +481,10 @@ int Volume::mountVol() {
     }
 
     SLOGE("Volume %s found no suitable devices for mounting :(\n", getLabel());
-    setState(Volume::State_Idle);
+    if ((getState() == Volume::State_NoMedia))
+        errno = ENODEV;
+    else
+        setState(Volume::State_Idle);
 
     return -1;
 }
@@ -587,6 +601,11 @@ int Volume::unmountVol(bool force, bool revert) {
         cryptfs_revert_volume(getLabel());
         revertDeviceInfo();
         SLOGI("Encrypted volume %s reverted successfully", getMountpoint());
+    }
+
+    if ((getState() == Volume::State_NoMedia)) {
+        mCurrentlyMountedKdev = -1;
+        goto out_nomedia;
     }
 
     setUuid(NULL);
