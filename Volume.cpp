@@ -258,7 +258,9 @@ int Volume::formatVol() {
     ret = 0;
 
 err:
-    setState(Volume::State_Idle);
+    if ((getState() != Volume::State_NoMedia))
+        setState(Volume::State_Idle);
+
     return ret;
 }
 
@@ -395,7 +397,12 @@ int Volume::mountVol() {
         SLOGI("%s being considered for volume %s\n", devicePath, getLabel());
 
         errno = 0;
-        setState(Volume::State_Checking);
+
+        if ((getState() == Volume::State_NoMedia)) {
+            errno = ENODEV;
+            return -1;
+        } else
+            setState(Volume::State_Checking);
 
         if (Fat::check(devicePath)) {
             if (errno == ENODATA) {
@@ -405,7 +412,10 @@ int Volume::mountVol() {
             errno = EIO;
             /* Badness - abort the mount */
             SLOGE("%s failed FS checks (%s)", devicePath, strerror(errno));
-            setState(Volume::State_Idle);
+            if ((getState() == Volume::State_NoMedia))
+                errno = ENODEV;
+            else
+                setState(Volume::State_Idle);
             return -1;
         }
 
@@ -438,7 +448,8 @@ int Volume::mountVol() {
         if (primaryStorage && createBindMounts()) {
             SLOGE("Failed to create bindmounts (%s)", strerror(errno));
             umount("/mnt/secure/staging");
-            setState(Volume::State_Idle);
+            if ((getState() != Volume::State_NoMedia))
+                setState(Volume::State_Idle);
             return -1;
         }
 
@@ -449,7 +460,8 @@ int Volume::mountVol() {
         if (doMoveMount("/mnt/secure/staging", getMountpoint(), false)) {
             SLOGE("Failed to move mount (%s)", strerror(errno));
             umount("/mnt/secure/staging");
-            setState(Volume::State_Idle);
+            if ((getState() != Volume::State_NoMedia))
+                setState(Volume::State_Idle);
             return -1;
         }
         setState(Volume::State_Mounted);
@@ -467,7 +479,10 @@ int Volume::mountVol() {
     }
 
     SLOGE("Volume %s found no suitable devices for mounting :(\n", getLabel());
-    setState(Volume::State_Idle);
+    if ((getState() == Volume::State_NoMedia))
+        errno = ENODEV;
+    else
+        setState(Volume::State_Idle);
 
     return -1;
 }
@@ -655,6 +670,11 @@ int Volume::unmountVol(bool force, bool revert) {
         SLOGI("Encrypted volume %s reverted successfully", getMountpoint());
     }
 
+    if ((getState() == Volume::State_NoMedia)) {
+        mCurrentlyMountedKdev = -1;
+        goto out_nomedia;
+    }
+
     setState(Volume::State_Idle);
     mCurrentlyMountedKdev = -1;
     return 0;
@@ -685,6 +705,7 @@ out_nomedia:
     setState(Volume::State_NoMedia);
     return -1;
 }
+
 int Volume::initializeMbr(const char *deviceNode) {
     struct disk_info dinfo;
 
