@@ -447,7 +447,7 @@ int Volume::mountVol() {
         int gid;
 
         if (Fat::doMount(devicePath, getMountpoint(), false, false, false,
-                AID_MEDIA_RW, AID_MEDIA_RW, 0007, true)) {
+                AID_MEDIA_RW, AID_SDCARD_RW, 0007, true)) {
             SLOGE("%s failed to mount via VFAT (%s)\n", devicePath, strerror(errno));
             continue;
         }
