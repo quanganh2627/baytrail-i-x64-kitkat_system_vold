@@ -432,7 +432,12 @@ int Volume::mountVol() {
             gid = AID_SDCARD_RW;
         } else {
             // For secondary external storage we keep things locked up.
-            gid = AID_MEDIA_RW;
+            /*
+             * Google set gid = AID_MEDIA_RW to keep things locked up.
+             * But we want the 3rd party application like file manager
+             * can still have the right to access it. So keep use AID_SDCARD_RW.
+             */
+            gid = AID_SDCARD_RW;
         }
         if (Fat::doMount(devicePath, "/mnt/secure/staging", false, false, false,
                 AID_SYSTEM, gid, 0702, true)) {
