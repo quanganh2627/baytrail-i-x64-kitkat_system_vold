@@ -184,20 +184,18 @@ int Fat::format(const char *fsPath, unsigned int numSectors, bool wipe) {
     args[2] = "32";
     args[3] = "-O";
     args[4] = "android";
-    args[5] = "-c";
-    args[6] = "8";
 
     if (numSectors) {
         char tmp[32];
         snprintf(tmp, sizeof(tmp), "%u", numSectors);
         const char *size = tmp;
-        args[7] = "-s";
-        args[8] = size;
-        args[9] = fsPath;
+        args[5] = "-s";
+        args[6] = size;
+        args[7] = fsPath;
         rc = android_fork_execvp(ARRAY_SIZE(args), (char **)args, &status,
                 false, true);
     } else {
-        args[7] = fsPath;
+        args[5] = fsPath;
         rc = android_fork_execvp(8, (char **)args, &status, false,
                 true);
     }
