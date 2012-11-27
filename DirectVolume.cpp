@@ -290,6 +290,28 @@ void DirectVolume::handleDiskRemoved(const char *devpath, NetlinkEvent *evt) {
     }
 
     SLOGD("Volume %s %s disk %d:%d removed\n", getLabel(), getMountpoint(), major, minor);
+    /*
+     * The disk itself is mounted. We need to unmount it first before remove
+     * disk
+     */
+    if (getState() == Volume::State_Mounted &&
+        (dev_t) MKDEV(major, minor) == mCurrentlyMountedKdev) {
+        snprintf(msg, sizeof(msg), "Volume %s %s bad removal (%d:%d)",
+            getLabel(), getMountpoint(), major, minor);
+        mVm->getBroadcaster()->sendBroadcast(ResponseCode::VolumeBadRemoval, msg, false);
+
+        if (mVm->cleanupAsec(this, true))
+            SLOGE("Failed to cleanup ASEC - unmount will probably fail!");
+
+        if (Volume::unmountVol(true, false)) {
+            SLOGE("Failed to unmount volume on bad removal (%s)", strerror(errno));
+            /* failed to unmount, maybe unexpected error would happen */
+        } else
+           SLOGD("Crisis averted");
+    }
+
+    mPartIdx = -1;
+
     snprintf(msg, sizeof(msg), "Volume %s %s disk removed (%d:%d)",
              getLabel(), getMountpoint(), major, minor);
     mVm->getBroadcaster()->sendBroadcast(ResponseCode::VolumeDiskRemoved,
@@ -362,7 +384,7 @@ int DirectVolume::getDeviceNodes(dev_t *devs, int max) {
         // If the disk has no partitions, try the disk itself
         if (!mDiskNumParts) {
             devs[0] = MKDEV(mDiskMajor, mDiskMinor);
-            return 1;
+            return 0;
         }
 
         int i;
