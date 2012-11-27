@@ -220,7 +220,7 @@ int Volume::formatVol(bool wipe) {
     bool formatEntireDevice = (mPartIdx == -1);
     char devicePath[255];
     dev_t diskNode = getDiskDevice();
-    dev_t partNode = MKDEV(MAJOR(diskNode), (formatEntireDevice ? 1 : MINOR(diskNode) + mPartIdx));
+    dev_t partNode = MKDEV(MAJOR(diskNode), (formatEntireDevice ? MINOR(diskNode) : MINOR(diskNode) + mPartIdx));
 
     setState(Volume::State_Formatting);
 
@@ -234,6 +234,15 @@ int Volume::formatVol(bool wipe) {
             SLOGE("Failed to initialize MBR (%s)", strerror(errno));
             goto err;
         }
+        /*
+         * Partition lba will be changed, and vold will record the
+         * new minor/major. vold doesn't provide a sync mechanism
+         * and we also don't know what the major/minor should be.
+         * Waiting for 50ms is just an experience value.
+         */
+        usleep(1000*50);
+        getDeviceNodes((dev_t *)&diskNode, 1);
+        partNode = MKDEV(MAJOR(diskNode), MINOR(diskNode));
     }
 
     sprintf(devicePath, "/dev/block/vold/%d:%d",
@@ -296,6 +305,7 @@ int Volume::mountVol() {
     char decrypt_state[PROPERTY_VALUE_MAX];
     char crypto_state[PROPERTY_VALUE_MAX];
     char encrypt_progress[PROPERTY_VALUE_MAX];
+    int nParts = 0;
 
     property_get("vold.decrypt", decrypt_state, "");
     property_get("vold.encrypt_progress", encrypt_progress, "");
@@ -328,11 +338,11 @@ int Volume::mountVol() {
         return 0;
     }
 
-    n = getDeviceNodes((dev_t *) &deviceNodes, 4);
-    if (!n) {
-        SLOGE("Failed to get device nodes (%s)\n", strerror(errno));
-        return -1;
-    }
+    nParts = getDeviceNodes((dev_t *) &deviceNodes, 4);
+    if (!nParts)
+        n = 1;
+    else
+        n = nParts;
 
     /* If we're running encrypted, and the volume is marked as encryptable and nonremovable,
      * and also marked as providing Asec storage, then we need to decrypt
@@ -445,7 +455,7 @@ int Volume::mountVol() {
          * And USB mass storage will export entire disk(all the partitions) to host PC.
          * So update the mPartIdx to export only one proper FAT FS partition.
          */
-        if (mPartIdx == -1)
+        if (mPartIdx == -1 && nParts)
             mPartIdx = i + 1;
 
         return 0;
