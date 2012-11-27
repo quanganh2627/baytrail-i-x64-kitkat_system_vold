@@ -19,6 +19,9 @@
 
 #include <utils/List.h>
 
+#define MAX_PARTS 32
+#define PATH_MAX  255
+
 class NetlinkEvent;
 class VolumeManager;
 
