@@ -248,7 +248,7 @@ int Volume::formatVol(bool wipe) {
     }
 
     bool formatEntireDevice = (mPartIdx == -1);
-    char devicePath[255];
+    char devicePath[PATH_MAX];
     dev_t diskNode = getDiskDevice();
     dev_t partNode = MKDEV(MAJOR(diskNode), (formatEntireDevice ? MINOR(diskNode) : MINOR(diskNode) + mPartIdx));
 
@@ -322,7 +322,8 @@ bool Volume::isMountpointMounted(const char *path) {
 }
 
 int Volume::mountVol() {
-    dev_t deviceNodes[4];
+    dev_t deviceNodes[MAX_PARTS];
+    dev_t diskdevice;
     int n, i, rc = 0;
     char errmsg[255];
 
@@ -335,6 +336,8 @@ int Volume::mountVol() {
     char crypto_state[PROPERTY_VALUE_MAX];
     char encrypt_progress[PROPERTY_VALUE_MAX];
     int nParts = 0;
+    char devicePath[PATH_MAX];
+    int extendPart = -1;
 
     property_get("vold.decrypt", decrypt_state, "");
     property_get("vold.encrypt_progress", encrypt_progress, "");
@@ -367,7 +370,7 @@ int Volume::mountVol() {
         return 0;
     }
 
-    nParts = getDeviceNodes((dev_t *) &deviceNodes, 4);
+    nParts = getDeviceNodes((dev_t *) &deviceNodes, MAX_PARTS);
     if (!nParts)
         n = 1;
     else
@@ -422,8 +425,19 @@ int Volume::mountVol() {
         }
     }
 
+    /*
+     * Since we support multiple partitions, in case there is extend SD card
+     * partition, we need to skip this extend partition
+     */
+    diskdevice = getDiskDevice();
+    sprintf(devicePath, "/dev/block/vold/%d:%d", MAJOR(diskdevice),
+        MINOR(diskdevice));
+    extendPart = Fat::check_extend(devicePath, n);
+
     for (i = 0; i < n; i++) {
-        char devicePath[255];
+
+        if (i == extendPart)
+            continue;
 
         sprintf(devicePath, "/dev/block/vold/%d:%d", MAJOR(deviceNodes[i]),
                 MINOR(deviceNodes[i]));
