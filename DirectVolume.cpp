@@ -105,6 +105,12 @@ int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
     const char *dp = evt->findParam("DEVPATH");
     int action = evt->getAction();
 
+    if (!dp) {
+        SLOGE("DEVPATH is NULL\n");
+        errno = ENODEV;
+        return -1;
+    }
+
     /* Get the secondary match name of usb volume */
     if (strstr(dp, UMS_MATCH_DIR)) {
        if ((action == NetlinkEvent::NlActionAdd) && !*getMatchStr()) {
