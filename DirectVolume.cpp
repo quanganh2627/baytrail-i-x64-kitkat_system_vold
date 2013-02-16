@@ -31,6 +31,11 @@
 #include "ResponseCode.h"
 #include "cryptfs.h"
 
+/*
+* usbcard Volume basic match path
+*/
+const char *UMS_MATCH_DIR   = "/block/sd";
+
 // #define PARTITION_DEBUG
 
 DirectVolume::DirectVolume(VolumeManager *vm, const fstab_rec* rec, int flags) :
@@ -42,6 +47,7 @@ DirectVolume::DirectVolume(VolumeManager *vm, const fstab_rec* rec, int flags) :
     mDiskMajor = -1;
     mDiskMinor = -1;
     mDiskNumParts = 0;
+    mMatchStr[0] = '\0';
 
     if (strcmp(rec->mount_point, "auto") != 0) {
         ALOGE("Vold managed volumes must have auto mount point; ignoring %s",
@@ -71,6 +77,10 @@ int DirectVolume::addPath(const char *path) {
     return 0;
 }
 
+void DirectVolume::setMatchStr(const char *str) {
+    strncpy(mMatchStr, str, sizeof(mMatchStr)-1);
+}
+
 dev_t DirectVolume::getDiskDevice() {
     return MKDEV(mDiskMajor, mDiskMinor);
 }
@@ -98,13 +108,32 @@ void DirectVolume::handleVolumeUnshared() {
 
 int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
     const char *dp = evt->findParam("DEVPATH");
+    int action = evt->getAction();
+
+    if (!dp) {
+        SLOGE("DEVPATH is NULL\n");
+        errno = ENODEV;
+        return -1;
+    }
+
+    /* Get the secondary match name of usb volume */
+    if (strstr(dp, UMS_MATCH_DIR)) {
+       if ((action == NetlinkEvent::NlActionAdd) && !*getMatchStr()) {
+            char *pos = strstr(dp, UMS_MATCH_DIR);
+            setMatchStr(pos);
+       }
+    }
 
     PathCollection::iterator  it;
     for (it = mPaths->begin(); it != mPaths->end(); ++it) {
         if (!strncmp(dp, *it, strlen(*it)) || (*it)[0] == '*' && strstr(dp, &(*it)[1])) {
             /* We can handle this disk */
-            int action = evt->getAction();
             const char *devtype = evt->findParam("DEVTYPE");
+
+            if (strstr(dp, UMS_MATCH_DIR) && !strstr(dp, getMatchStr())) {
+                errno = ENODEV;
+                return -1;
+            }
 
             if (action == NetlinkEvent::NlActionAdd) {
                 int major = atoi(evt->findParam("MAJOR"));
@@ -135,6 +164,10 @@ int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
                 }
             } else if (action == NetlinkEvent::NlActionRemove) {
                 if (!strcmp(devtype, "disk")) {
+                    /* clear mMatchStr before disk remove */
+                    if (strstr(dp, getMatchStr())) {
+                            setMatchStr("\0");
+                    }
                     handleDiskRemoved(dp, evt);
                 } else {
                     handlePartitionRemoved(dp, evt);
