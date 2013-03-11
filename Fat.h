@@ -27,6 +27,7 @@ public:
                        int ownerUid, int ownerGid, int permMask,
                        bool createLost);
     static int format(const char *fsPath, unsigned int numSectors);
+    static int check_extend(const char *fsPath, unsigned int numParts);
 };
 
 #endif

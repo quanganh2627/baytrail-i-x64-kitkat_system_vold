@@ -212,7 +212,7 @@ static int process_config(VolumeManager *vm) {
             }
 
             while ((sysfs_path = strtok_r(NULL, delim, &save_ptr))) {
-                if (*sysfs_path != '/') {
+                if (*sysfs_path != '/' && *sysfs_path != '*') {
                     /* If the first character is not a '/', it must be flags */
                     break;
                 }

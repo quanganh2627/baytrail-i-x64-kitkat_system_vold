@@ -599,7 +599,7 @@ static int wait_and_unmount(char *mountpoint)
                 break;
             }
             sleep(1);
-            i++;
+
         } else {
           break;
         }
