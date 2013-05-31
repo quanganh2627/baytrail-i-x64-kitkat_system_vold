@@ -570,6 +570,16 @@ int Volume::doUnmount(const char *path, bool force) {
         Process::killProcessesWithOpenFiles(path, action);
         usleep(1000*1000);
     }
+
+    sync();
+    /* perform a MNT_DETACH lazy unmount,
+     * in case that files are been deleting,
+     * and the user process cannot be found and killed by killProcessesWithOpenFiles. */
+    if (!umount2(path, MNT_DETACH) || errno == EINVAL || errno == ENOENT) {
+        SLOGI("%s sucessfully unmounted with MNT_DETACH flag", path);
+        return 0;
+    }
+
     errno = EBUSY;
     SLOGE("Giving up on unmount %s (%s)", path, strerror(errno));
     return -1;
