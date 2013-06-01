@@ -457,6 +457,17 @@ int Volume::mountVol() {
         snprintf(service, 64, "fuse_%s", getLabel());
         property_set("ctl.start", service);
 
+        /*
+         * If the actual block device is removed, unmount it from final mountpoint.
+         * Don't unmount the bindmount and tmpfs, because we don't use them now.
+         */
+        if (getState() == Volume::State_NoMedia) {
+            SLOGD("Maybe the device is removed?");
+            umount(getMountpoint());
+            errno = ENODEV;
+            return -1;
+        }
+
         setState(Volume::State_Mounted);
         mCurrentlyMountedKdev = deviceNodes[i];
         return 0;
