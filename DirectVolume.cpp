@@ -330,6 +330,10 @@ void DirectVolume::handleDiskRemoved(const char *devpath, NetlinkEvent *evt) {
     char msg[255];
     bool enabled;
 
+    if (getState() == Volume::State_NoMedia) {
+        return;
+    }
+
     if (mVm->shareEnabled(getLabel(), "ums", &enabled) == 0 && enabled) {
         mVm->unshareVolume(getLabel(), "ums");
     }
