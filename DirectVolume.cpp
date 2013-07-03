@@ -113,6 +113,13 @@ int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
 
     /* Get the secondary match name of usb volume */
     if (strstr(dp, UMS_MATCH_DIR)) {
+       /* Bypass other uevents not belongs to usb */
+       if (!strstr(dp, "usb")) {
+             SLOGW("Ignoring non usbcard volume event\n");
+             errno = ENODEV;
+             return -1;
+       }
+
        if ((action == NetlinkEvent::NlActionAdd) && !*getMatchStr()) {
             char *pos = strstr(dp, UMS_MATCH_DIR);
             setMatchStr(pos);
