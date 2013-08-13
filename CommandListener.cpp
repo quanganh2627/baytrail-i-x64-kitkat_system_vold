@@ -39,6 +39,9 @@
 #include "Devmapper.h"
 #include "cryptfs.h"
 #include "fstrim.h"
+#ifdef INTEL_FEATURE_ARKHAM
+#include "EssCmd.h"
+#endif
 
 #define DUMP_ARGS 0
 
@@ -52,6 +55,9 @@ CommandListener::CommandListener() :
     registerCmd(new XwarpCmd());
     registerCmd(new CryptfsCmd());
     registerCmd(new FstrimCmd());
+#ifdef INTEL_FEATURE_ARKHAM
+    registerCmd(new EssCmd());
+#endif
 }
 
 void CommandListener::dumpArgs(int argc, char **argv, int argObscure) {
