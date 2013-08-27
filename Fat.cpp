@@ -29,20 +29,22 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
+#include <sys/wait.h>
 
 #include <linux/kdev_t.h>
-#include <linux/fs.h>
 
 #define LOG_TAG "Vold"
 
 #include <cutils/log.h>
 #include <cutils/properties.h>
 
+#include <logwrap/logwrap.h>
+
 #include "Fat.h"
+#include "VoldUtil.h"
 
 static char FSCK_MSDOS_PATH[] = "/system/bin/fsck_msdos";
 static char MKDOSFS_PATH[] = "/system/bin/newfs_msdos";
-extern "C" int logwrap(int argc, const char **argv, int background);
 extern "C" int mount(const char *, const char *, const char *, unsigned long, const void *);
 
 int Fat::check(const char *fsPath) {
@@ -55,16 +57,30 @@ int Fat::check(const char *fsPath) {
     int pass = 1;
     int rc = 0;
     do {
-        const char *args[5];
+        const char *args[4];
+        int status;
         args[0] = FSCK_MSDOS_PATH;
         args[1] = "-p";
         args[2] = "-f";
         args[3] = fsPath;
-        args[4] = NULL;
 
-        rc = logwrap(4, args, 1);
+        rc = android_fork_execvp(ARRAY_SIZE(args), (char **)args, &status,
+                false, true);
+        if (rc != 0) {
+            SLOGE("Filesystem check failed due to logwrap error");
+            errno = EIO;
+            return -1;
+        }
 
-        switch(rc) {
+        if (!WIFEXITED(status)) {
+            SLOGE("Filesystem check did not exit properly");
+            errno = EIO;
+            return -1;
+        }
+
+        status = WEXITSTATUS(status);
+
+        switch(status) {
         case 0:
             SLOGI("Filesystem check completed OK");
             return 0;
@@ -85,7 +101,7 @@ int Fat::check(const char *fsPath) {
             return -1;
 
         default:
-            SLOGE("Filesystem check failed (unknown exit code %d)", rc);
+            SLOGE("Filesystem check failed (unknown exit code %d)", status);
             errno = EIO;
             return -1;
         }
@@ -153,39 +169,87 @@ int Fat::doMount(const char *fsPath, const char *mountPoint,
 
 int Fat::format(const char *fsPath, unsigned int numSectors) {
     int fd;
-    const char *args[11];
+    const char *args[10];
     int rc;
+    int status;
 
     args[0] = MKDOSFS_PATH;
     args[1] = "-F";
     args[2] = "32";
     args[3] = "-O";
     args[4] = "android";
-    args[5] = "-c";
-    args[6] = "8";
 
     if (numSectors) {
         char tmp[32];
         snprintf(tmp, sizeof(tmp), "%u", numSectors);
         const char *size = tmp;
-        args[7] = "-s";
-        args[8] = size;
-        args[9] = fsPath;
-        args[10] = NULL;
-        rc = logwrap(11, args, 1);
-    } else {
+        args[5] = "-s";
+        args[6] = size;
         args[7] = fsPath;
-        args[8] = NULL;
-        rc = logwrap(9, args, 1);
+        rc = android_fork_execvp(ARRAY_SIZE(args), (char **)args, &status,
+                false, true);
+    } else {
+        args[5] = fsPath;
+        rc = android_fork_execvp(8, (char **)args, &status, false,
+                true);
     }
 
-    if (rc == 0) {
+    if (rc != 0) {
+        SLOGE("Filesystem format failed due to logwrap error");
+        errno = EIO;
+        return -1;
+    }
+
+    if (!WIFEXITED(status)) {
+        SLOGE("Filesystem format did not exit properly");
+        errno = EIO;
+        return -1;
+    }
+
+    status = WEXITSTATUS(status);
+
+    if (status == 0) {
         SLOGI("Filesystem formatted OK");
         return 0;
     } else {
-        SLOGE("Format failed (unknown exit code %d)", rc);
+        SLOGE("Format failed (unknown exit code %d)", status);
         errno = EIO;
         return -1;
     }
     return 0;
+}
+
+int Fat::check_extend(const char *fsPath, unsigned int numParts)
+{
+    int n = numParts, i, fd;
+    unsigned char buf[512];
+    unsigned char *PartInfo;
+    int PartInfoOffset = 0x1be;
+    int sizeofPart = 16;
+
+    fd = open(fsPath, O_RDONLY);
+    if (fd < 0) {
+         /* Badness - abort the mount */
+         SLOGE("%s failed FS open (%s)", fsPath, strerror(errno));
+         return -1;
+    }
+
+    if (read(fd, buf, 512) < 0) {
+        /* Badness - abort the mount */
+        SLOGE("%s failed MBR read (%s)", fsPath, strerror(errno));
+        close(fd);
+        return -1;
+    }
+    close(fd);
+
+    PartInfo = buf + PartInfoOffset;
+
+    for (i = 0; i < n; i++, PartInfo += sizeofPart) {
+        if (PartInfo[4] == 5) {
+            SLOGW("%s This is an Extend Partition, skip to next one, n is %d\n", fsPath, i);
+            return i;
+        }
+    }
+
+    return -1;
 }
