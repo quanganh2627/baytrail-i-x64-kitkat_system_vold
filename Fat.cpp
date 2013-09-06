@@ -190,6 +190,7 @@ int Fat::format(const char *fsPath, unsigned int numSectors) {
                 false, true);
     } else {
         args[5] = fsPath;
+        args[6] = NULL;
         rc = android_fork_execvp(8, (char **)args, &status, false,
                 true);
     }
