@@ -26,6 +26,9 @@ public:
     static const int VolumeListResult         = 110;
     static const int AsecListResult           = 111;
     static const int StorageUsersListResult   = 112;
+#ifdef INTEL_FEATURE_ARKHAM
+    static const int EssKeyResult             = 113;
+#endif
 
     // 200 series - Requested action has been successfully completed
     static const int CommandOkay              = 200;
