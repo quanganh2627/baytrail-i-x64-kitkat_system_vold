@@ -20,7 +20,7 @@
 #include <utils/List.h>
 #include <fs_mgr.h>
 
-#define MAX_PARTS 32
+#define MAX_PARTS 16
 #define PATH_MAX  255
 
 class NetlinkEvent;
