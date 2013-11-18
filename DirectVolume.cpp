@@ -243,12 +243,17 @@ void DirectVolume::handlePartitionAdded(const char *devpath, NetlinkEvent *evt) 
 void DirectVolume::handleDiskChanged(const char *devpath, NetlinkEvent *evt) {
     int major = atoi(evt->findParam("MAJOR"));
     int minor = atoi(evt->findParam("MINOR"));
+    int disk_ro = 0;
+    const char *disk_ro_str = evt->findParam("DISK_RO");
 
     if ((major != mDiskMajor) || (minor != mDiskMinor)) {
         return;
     }
+    if (disk_ro_str != NULL) {
+        disk_ro = atoi(disk_ro_str);
+    }
 
-    SLOGI("Volume %s disk has changed", getLabel());
+    SLOGI("Volume %s disk has changed (mode=%s)", getLabel(), (disk_ro == 1)?"RO":"RW");
     const char *tmp = evt->findParam("NPARTS");
     if (tmp) {
         mDiskNumParts = atoi(tmp);
@@ -264,7 +269,10 @@ void DirectVolume::handleDiskChanged(const char *devpath, NetlinkEvent *evt) {
     }
     mPendingPartMap = partmask;
 
-    if (getState() != Volume::State_Formatting) {
+    /* If DISK_RO param is present, this is a notification of mode changing between RO/RW
+     * Since Android has no support for such states (RO/RW), we just ignore these notifications
+     */
+    if (getState() != Volume::State_Formatting && disk_ro_str == NULL) {
         if (mDiskNumParts == 0) {
             setState(Volume::State_Idle);
         } else {
