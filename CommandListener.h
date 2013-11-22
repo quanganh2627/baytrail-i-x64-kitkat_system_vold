@@ -24,9 +24,10 @@ class CommandListener : public FrameworkListener {
 public:
     CommandListener();
     virtual ~CommandListener() {}
-    static void dumpArgs(int argc, char **argv, int argObscure);
 
 private:
+    static void dumpArgs(int argc, char **argv, int argObscure);
+
     class DumpCmd : public VoldCommand {
     public:
         DumpCmd();

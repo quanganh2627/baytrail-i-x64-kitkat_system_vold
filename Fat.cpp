@@ -178,19 +178,20 @@ int Fat::format(const char *fsPath, unsigned int numSectors) {
     args[2] = "32";
     args[3] = "-O";
     args[4] = "android";
+    args[5] = "-c";
+    args[6] = "8";
 
     if (numSectors) {
         char tmp[32];
         snprintf(tmp, sizeof(tmp), "%u", numSectors);
         const char *size = tmp;
-        args[5] = "-s";
-        args[6] = size;
-        args[7] = fsPath;
+        args[7] = "-s";
+        args[8] = size;
+        args[9] = fsPath;
         rc = android_fork_execvp(ARRAY_SIZE(args), (char **)args, &status,
                 false, true);
     } else {
-        args[5] = fsPath;
-        args[6] = NULL;
+        args[7] = fsPath;
         rc = android_fork_execvp(8, (char **)args, &status, false,
                 true);
     }
@@ -218,39 +219,4 @@ int Fat::format(const char *fsPath, unsigned int numSectors) {
         return -1;
     }
     return 0;
-}
-
-int Fat::check_extend(const char *fsPath, unsigned int numParts)
-{
-    int n = numParts, i, fd;
-    unsigned char buf[512];
-    unsigned char *PartInfo;
-    int PartInfoOffset = 0x1be;
-    int sizeofPart = 16;
-
-    fd = open(fsPath, O_RDONLY);
-    if (fd < 0) {
-         /* Badness - abort the mount */
-         SLOGE("%s failed FS open (%s)", fsPath, strerror(errno));
-         return -1;
-    }
-
-    if (read(fd, buf, 512) < 0) {
-        /* Badness - abort the mount */
-        SLOGE("%s failed MBR read (%s)", fsPath, strerror(errno));
-        close(fd);
-        return -1;
-    }
-    close(fd);
-
-    PartInfo = buf + PartInfoOffset;
-
-    for (i = 0; i < n; i++, PartInfo += sizeofPart) {
-        if (PartInfo[4] == 5) {
-            SLOGW("%s This is an Extend Partition, skip to next one, n is %d\n", fsPath, i);
-            return i;
-        }
-    }
-
-    return -1;
 }

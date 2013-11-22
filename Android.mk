@@ -32,17 +32,6 @@ common_shared_libraries := \
 	liblogwrap \
 	libcrypto
 
-#ARKHAM-952: add ess command to vold that
-#uses ecryptfs for container encryption
-ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
-ESS_LOCAL_PATH := vendor/intel/arkham/system/vold
-common_src_files += \
-        ../../$(ESS_LOCAL_PATH)/ess.c \
-        ../../$(ESS_LOCAL_PATH)/EssCmd.cpp
-common_c_includes += \
-        $(ESS_LOCAL_PATH)
-endif
-
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libvold
@@ -57,10 +46,6 @@ LOCAL_STATIC_LIBRARIES := libfs_mgr
 
 LOCAL_MODULE_TAGS := eng tests
 
-ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
-LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM
-endif
-
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -74,9 +59,6 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := $(common_c_includes)
 
 LOCAL_CFLAGS := -Werror=format
-ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
-LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM
-endif
 
 LOCAL_SHARED_LIBRARIES := $(common_shared_libraries)
 
