@@ -32,6 +32,7 @@
 
 #include <openssl/md5.h>
 
+#include <cutils/fs.h>
 #include <cutils/log.h>
 
 #include <sysutils/NetlinkEvent.h>
@@ -158,7 +159,7 @@ int VolumeManager::listVolumes(SocketClient *cli) {
     for (i = mVolumes->begin(); i != mVolumes->end(); ++i) {
         char *buffer;
         asprintf(&buffer, "%s %s %d",
-                 (*i)->getLabel(), (*i)->getMountpoint(),
+                 (*i)->getLabel(), (*i)->getFuseMountpoint(),
                  (*i)->getState());
         cli->sendMsg(ResponseCode::VolumeListResult, buffer, false);
         free(buffer);
@@ -167,7 +168,7 @@ int VolumeManager::listVolumes(SocketClient *cli) {
     return 0;
 }
 
-int VolumeManager::formatVolume(const char *label) {
+int VolumeManager::formatVolume(const char *label, bool wipe) {
     Volume *v = lookupVolume(label);
 
     if (!v) {
@@ -180,7 +181,7 @@ int VolumeManager::formatVolume(const char *label) {
         return -1;
     }
 
-    return v->formatVol();
+    return v->formatVol(wipe);
 }
 
 int VolumeManager::getObbMountPath(const char *sourceFile, char *mountPath, int mountPathLen) {
@@ -414,7 +415,7 @@ int VolumeManager::createAsec(const char *id, unsigned int numSectors, const cha
         if (usingExt4) {
             formatStatus = Ext4::format(dmDevice, mountPoint);
         } else {
-            formatStatus = Fat::format(dmDevice, numImgSectors);
+            formatStatus = Fat::format(dmDevice, numImgSectors, 0);
         }
 
         if (formatStatus < 0) {
@@ -1053,7 +1054,7 @@ Volume* VolumeManager::getVolumeForFile(const char *fileName) {
     VolumeCollection::iterator i;
 
     for (i = mVolumes->begin(); i != mVolumes->end(); ++i) {
-        const char* mountPoint = (*i)->getMountpoint();
+        const char* mountPoint = (*i)->getFuseMountpoint();
         if (!strncmp(fileName, mountPoint, strlen(mountPoint))) {
             return *i;
         }
@@ -1511,7 +1512,7 @@ Volume *VolumeManager::lookupVolume(const char *label) {
 
     for (i = mVolumes->begin(); i != mVolumes->end(); ++i) {
         if (label[0] == '/') {
-            if (!strcmp(label, (*i)->getMountpoint()))
+            if (!strcmp(label, (*i)->getFuseMountpoint()))
                 return (*i);
         } else {
             if (!strcmp(label, (*i)->getLabel()))
@@ -1569,7 +1570,7 @@ int VolumeManager::cleanupAsec(Volume *v, bool force) {
 
     for (AsecIdCollection::iterator it = toUnmount.begin(); it != toUnmount.end(); ++it) {
         ContainerData *cd = *it;
-        SLOGI("Unmounting ASEC %s (dependant on %s)", cd->id, v->getMountpoint());
+        SLOGI("Unmounting ASEC %s (dependant on %s)", cd->id, v->getFuseMountpoint());
         if (unmountObb(cd->id, force)) {
             SLOGE("Failed to unmount OBB %s (%s)", cd->id, strerror(errno));
             rc = -1;
@@ -1577,6 +1578,26 @@ int VolumeManager::cleanupAsec(Volume *v, bool force) {
     }
 
     return rc;
-
 }
 
+int VolumeManager::mkdirs(char* path) {
+    // Require that path lives under a volume we manage
+    const char* emulated_source = getenv("EMULATED_STORAGE_SOURCE");
+    const char* root = NULL;
+    if (!strncmp(path, emulated_source, strlen(emulated_source))) {
+        root = emulated_source;
+    } else {
+        Volume* vol = getVolumeForFile(path);
+        if (vol) {
+            root = vol->getMountpoint();
+        }
+    }
+
+    if (!root) {
+        SLOGE("Failed to find volume for %s", path);
+        return -EINVAL;
+    }
+
+    /* fs_mkdirs() does symlink checking and relative path enforcement */
+    return fs_mkdirs(path, 0700);
+}

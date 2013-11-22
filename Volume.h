@@ -18,6 +18,10 @@
 #define _VOLUME_H
 
 #include <utils/List.h>
+#include <fs_mgr.h>
+
+#define MAX_PARTS 32
+#define PATH_MAX  255
 
 class NetlinkEvent;
 class VolumeManager;
@@ -25,6 +29,7 @@ class VolumeManager;
 class Volume {
 private:
     int mState;
+    int mFlags;
 
 public:
     static const int State_Init       = -1;
@@ -38,9 +43,8 @@ public:
     static const int State_Shared     = 7;
     static const int State_SharedMnt  = 8;
 
-    static const char *SECDIR;
-    static const char *SEC_STGDIR;
-    static const char *SEC_STG_SECIMGDIR;
+    static const char *MEDIA_DIR;
+    static const char *FUSE_DIR;
     static const char *SEC_ASECDIR_EXT;
     static const char *SEC_ASECDIR_INT;
     static const char *ASECDIR;
@@ -49,7 +53,6 @@ public:
 
 protected:
     char *mLabel;
-    char *mMountpoint;
     VolumeManager *mVm;
     bool mDebug;
     int mPartIdx;
@@ -62,16 +65,20 @@ protected:
     dev_t mCurrentlyMountedKdev;
 
 public:
-    Volume(VolumeManager *vm, const char *label, const char *mount_point);
+    Volume(VolumeManager *vm, const fstab_rec* rec, int flags);
     virtual ~Volume();
 
     int mountVol();
     int unmountVol(bool force, bool revert);
-    int formatVol();
+    int formatVol(bool wipe);
 
     const char *getLabel() { return mLabel; }
-    const char *getMountpoint() { return mMountpoint; }
     int getState() { return mState; }
+    int getFlags() { return mFlags; };
+
+    /* Mountpoint of the raw volume */
+    virtual const char *getMountpoint() = 0;
+    virtual const char *getFuseMountpoint() = 0;
 
     virtual int handleBlockEvent(NetlinkEvent *evt);
     virtual dev_t getDiskDevice();
@@ -89,16 +96,14 @@ protected:
     virtual int updateDeviceInfo(char *new_path, int new_major, int new_minor) = 0;
     virtual void revertDeviceInfo(void) = 0;
     virtual int isDecrypted(void) = 0;
-    virtual int getFlags(void) = 0;
 
     int createDeviceNode(const char *path, int major, int minor);
 
 private:
     int initializeMbr(const char *deviceNode);
     bool isMountpointMounted(const char *path);
-    int createBindMounts();
+    int mountAsecExternal();
     int doUnmount(const char *path, bool force);
-    int doMoveMount(const char *src, const char *dst, bool force);
     void protectFromAutorunStupidity();
 };
 

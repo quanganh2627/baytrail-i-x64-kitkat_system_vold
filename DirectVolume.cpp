@@ -31,13 +31,15 @@
 #include "ResponseCode.h"
 #include "cryptfs.h"
 
+/*
+* usbcard Volume basic match path
+*/
+const char *UMS_MATCH_DIR   = "/block/sd";
+
 // #define PARTITION_DEBUG
 
-DirectVolume::DirectVolume(VolumeManager *vm, const char *label,
-                           const char *mount_point, int partIdx) :
-              Volume(vm, label, mount_point) {
-    mPartIdx = partIdx;
-
+DirectVolume::DirectVolume(VolumeManager *vm, const fstab_rec* rec, int flags) :
+        Volume(vm, rec, flags) {
     mPaths = new PathCollection();
     for (int i = 0; i < MAX_PARTITIONS; i++)
         mPartMinors[i] = -1;
@@ -45,6 +47,19 @@ DirectVolume::DirectVolume(VolumeManager *vm, const char *label,
     mDiskMajor = -1;
     mDiskMinor = -1;
     mDiskNumParts = 0;
+    mMatchStr[0] = '\0';
+
+    if (strcmp(rec->mount_point, "auto") != 0) {
+        ALOGE("Vold managed volumes must have auto mount point; ignoring %s",
+              rec->mount_point);
+    }
+
+    char mount[PATH_MAX];
+
+    snprintf(mount, PATH_MAX, "%s/%s", Volume::MEDIA_DIR, rec->label);
+    mMountpoint = strdup(mount);
+    snprintf(mount, PATH_MAX, "%s/%s", Volume::FUSE_DIR, rec->label);
+    mFuseMountpoint = strdup(mount);
 
     setState(Volume::State_NoMedia);
 }
@@ -62,8 +77,8 @@ int DirectVolume::addPath(const char *path) {
     return 0;
 }
 
-void DirectVolume::setFlags(int flags) {
-    mFlags = flags;
+void DirectVolume::setMatchStr(const char *str) {
+    strncpy(mMatchStr, str, sizeof(mMatchStr)-1);
 }
 
 dev_t DirectVolume::getDiskDevice() {
@@ -72,7 +87,12 @@ dev_t DirectVolume::getDiskDevice() {
 
 dev_t DirectVolume::getShareDevice() {
     if (mPartIdx != -1) {
-        return MKDEV(mDiskMajor, mPartIdx);
+        /*
+         * If more than one mass storage devices are mounted, mDiskMinor should be added.
+         * For example, the first device is 179:0-179:7, the second is 179:8-179:9.
+         * If system want to export 179:9, the minor index of MKDEV should be 8+1.
+         */
+        return MKDEV(mDiskMajor, mDiskMinor + mPartIdx);
     } else {
         return MKDEV(mDiskMajor, mDiskMinor);
     }
@@ -88,13 +108,39 @@ void DirectVolume::handleVolumeUnshared() {
 
 int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
     const char *dp = evt->findParam("DEVPATH");
+    int action = evt->getAction();
+
+    if (!dp) {
+        SLOGE("DEVPATH is NULL\n");
+        errno = ENODEV;
+        return -1;
+    }
+
+    /* Get the secondary match name of usb volume */
+    if (strstr(dp, UMS_MATCH_DIR)) {
+       /* Bypass other uevents not belongs to usb */
+       if (!strstr(dp, "usb")) {
+             SLOGW("Ignoring non usbcard volume event\n");
+             errno = ENODEV;
+             return -1;
+       }
+
+       if ((action == NetlinkEvent::NlActionAdd) && !*getMatchStr()) {
+            char *pos = strstr(dp, UMS_MATCH_DIR);
+            setMatchStr(pos);
+       }
+    }
 
     PathCollection::iterator  it;
     for (it = mPaths->begin(); it != mPaths->end(); ++it) {
-        if (!strncmp(dp, *it, strlen(*it))) {
+        if (!strncmp(dp, *it, strlen(*it)) || (*it)[0] == '*' && strstr(dp, &(*it)[1])) {
             /* We can handle this disk */
-            int action = evt->getAction();
             const char *devtype = evt->findParam("DEVTYPE");
+
+            if (strstr(dp, UMS_MATCH_DIR) && !strstr(dp, getMatchStr())) {
+                errno = ENODEV;
+                return -1;
+            }
 
             if (action == NetlinkEvent::NlActionAdd) {
                 int major = atoi(evt->findParam("MAJOR"));
@@ -119,12 +165,16 @@ int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
 
                     snprintf(msg, sizeof(msg),
                              "Volume %s %s disk inserted (%d:%d)", getLabel(),
-                             getMountpoint(), mDiskMajor, mDiskMinor);
+                             getFuseMountpoint(), mDiskMajor, mDiskMinor);
                     mVm->getBroadcaster()->sendBroadcast(ResponseCode::VolumeDiskInserted,
                                                          msg, false);
                 }
             } else if (action == NetlinkEvent::NlActionRemove) {
                 if (!strcmp(devtype, "disk")) {
+                    /* clear mMatchStr before disk remove */
+                    if (strstr(dp, getMatchStr())) {
+                            setMatchStr("\0");
+                    }
                     handleDiskRemoved(dp, evt);
                 } else {
                     handlePartitionRemoved(dp, evt);
@@ -280,13 +330,39 @@ void DirectVolume::handleDiskRemoved(const char *devpath, NetlinkEvent *evt) {
     char msg[255];
     bool enabled;
 
+    if (getState() == Volume::State_NoMedia) {
+        return;
+    }
+
     if (mVm->shareEnabled(getLabel(), "ums", &enabled) == 0 && enabled) {
         mVm->unshareVolume(getLabel(), "ums");
     }
 
     SLOGD("Volume %s %s disk %d:%d removed\n", getLabel(), getMountpoint(), major, minor);
+    /*
+     * The disk itself is mounted. We need to unmount it first before remove
+     * disk
+     */
+    if (getState() == Volume::State_Mounted &&
+        (dev_t) MKDEV(major, minor) == mCurrentlyMountedKdev) {
+        snprintf(msg, sizeof(msg), "Volume %s %s bad removal (%d:%d)",
+            getLabel(), getMountpoint(), major, minor);
+        mVm->getBroadcaster()->sendBroadcast(ResponseCode::VolumeBadRemoval, msg, false);
+
+        if (mVm->cleanupAsec(this, true))
+            SLOGE("Failed to cleanup ASEC - unmount will probably fail!");
+
+        if (Volume::unmountVol(true, false)) {
+            SLOGE("Failed to unmount volume on bad removal (%s)", strerror(errno));
+            /* failed to unmount, maybe unexpected error would happen */
+        } else
+           SLOGD("Crisis averted");
+    }
+
+    mPartIdx = -1;
+
     snprintf(msg, sizeof(msg), "Volume %s %s disk removed (%d:%d)",
-             getLabel(), getMountpoint(), major, minor);
+             getLabel(), getFuseMountpoint(), major, minor);
     mVm->getBroadcaster()->sendBroadcast(ResponseCode::VolumeDiskRemoved,
                                              msg, false);
     setState(Volume::State_NoMedia);
@@ -317,7 +393,7 @@ void DirectVolume::handlePartitionRemoved(const char *devpath, NetlinkEvent *evt
          */
 
         snprintf(msg, sizeof(msg), "Volume %s %s bad removal (%d:%d)",
-                 getLabel(), getMountpoint(), major, minor);
+                 getLabel(), getFuseMountpoint(), major, minor);
         mVm->getBroadcaster()->sendBroadcast(ResponseCode::VolumeBadRemoval,
                                              msg, false);
 
@@ -357,7 +433,7 @@ int DirectVolume::getDeviceNodes(dev_t *devs, int max) {
         // If the disk has no partitions, try the disk itself
         if (!mDiskNumParts) {
             devs[0] = MKDEV(mDiskMajor, mDiskMinor);
-            return 1;
+            return 0;
         }
 
         int i;
@@ -452,7 +528,7 @@ int DirectVolume::getVolInfo(struct volume_info *v)
 {
     strcpy(v->label, mLabel);
     strcpy(v->mnt_point, mMountpoint);
-    v->flags=mFlags;
+    v->flags = getFlags();
     /* Other fields of struct volume_info are filled in by the caller or cryptfs.c */
 
     return 0;

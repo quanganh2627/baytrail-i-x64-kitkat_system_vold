@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef _VOLDUTIL_H
-#define _VOLDUTIL_H
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 
-#include <sys/cdefs.h>
+unsigned int get_blkdev_size(int fd)
+{
+  unsigned int nr_sec;
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+  if ( (ioctl(fd, BLKGETSIZE, &nr_sec)) == -1) {
+    nr_sec = 0;
+  }
 
-__BEGIN_DECLS
-  unsigned int get_blkdev_size(int fd);
-__END_DECLS
-
-#endif
+  return nr_sec;
+}
