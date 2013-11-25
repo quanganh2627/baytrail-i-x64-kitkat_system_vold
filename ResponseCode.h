@@ -27,6 +27,9 @@ public:
     static const int AsecListResult           = 111;
     static const int StorageUsersListResult   = 112;
     static const int CryptfsGetfieldResult    = 113;
+#ifdef INTEL_FEATURE_ARKHAM
+    static const int EssKeyResult = 114;
+#endif
 
     // 200 series - Requested action has been successfully completed
     static const int CommandOkay              = 200;
