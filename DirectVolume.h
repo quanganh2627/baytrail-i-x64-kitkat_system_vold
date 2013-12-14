@@ -21,13 +21,13 @@
 
 #include "Volume.h"
 
-#define MAX_PARTS 4
+#define MAX_MATCHSTR 25
 
 typedef android::List<char *> PathCollection;
 
 class DirectVolume : public Volume {
 public:
-    static const int MAX_PARTITIONS = 32;
+    static const int MAX_PARTITIONS = MAX_PARTS;
 protected:
     const char* mMountpoint;
     const char* mFuseMountpoint;
@@ -42,7 +42,7 @@ protected:
     int            mDiskNumParts;
     unsigned int   mPendingPartMap;
     int            mIsDecrypted;
-    int            mFlags;
+    char           mMatchStr[MAX_MATCHSTR];
 
 public:
     DirectVolume(VolumeManager *vm, const fstab_rec* rec, int flags);
@@ -65,7 +65,6 @@ protected:
     int updateDeviceInfo(char *new_path, int new_major, int new_minor);
     virtual void revertDeviceInfo(void);
     int isDecrypted() { return mIsDecrypted; }
-    int getFlags() { return mFlags; }
 
 private:
     void handleDiskAdded(const char *devpath, NetlinkEvent *evt);
@@ -77,6 +76,8 @@ private:
 
     int doMountVfat(const char *deviceNode, const char *mountPoint);
 
+    const char *getMatchStr() { return mMatchStr; }
+    void setMatchStr(const char *str);
 };
 
 typedef android::List<DirectVolume *> DirectVolumeCollection;
