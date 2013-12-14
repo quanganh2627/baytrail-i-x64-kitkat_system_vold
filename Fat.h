@@ -26,7 +26,6 @@ public:
                        bool ro, bool remount, bool executable,
                        int ownerUid, int ownerGid, int permMask,
                        bool createLost);
-    static int check_extend(const char *fsPath, unsigned int numParts);
     static int format(const char *fsPath, unsigned int numSectors, bool wipe);
 
 private:

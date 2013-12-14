@@ -218,9 +218,9 @@ int Volume::formatVol(bool wipe) {
     }
 
     bool formatEntireDevice = (mPartIdx == -1);
-    char devicePath[PATH_MAX];
+    char devicePath[255];
     dev_t diskNode = getDiskDevice();
-    dev_t partNode = MKDEV(MAJOR(diskNode), (formatEntireDevice ? MINOR(diskNode) : MINOR(diskNode) + mPartIdx));
+    dev_t partNode = MKDEV(MAJOR(diskNode), (formatEntireDevice ? 1 : mPartIdx));
 
     setState(Volume::State_Formatting);
 
@@ -234,15 +234,6 @@ int Volume::formatVol(bool wipe) {
             SLOGE("Failed to initialize MBR (%s)", strerror(errno));
             goto err;
         }
-        /*
-         * Partition lba will be changed, and vold will record the
-         * new minor/major. vold doesn't provide a sync mechanism
-         * and we also don't know what the major/minor should be.
-         * Waiting for 50ms is just an experience value.
-         */
-        usleep(1000*50);
-        getDeviceNodes((dev_t *)&diskNode, 1);
-        partNode = MKDEV(MAJOR(diskNode), MINOR(diskNode));
     }
 
     sprintf(devicePath, "/dev/block/vold/%d:%d",
@@ -260,9 +251,7 @@ int Volume::formatVol(bool wipe) {
     ret = 0;
 
 err:
-    if ((getState() != Volume::State_NoMedia))
-        setState(Volume::State_Idle);
-
+    setState(Volume::State_Idle);
     return ret;
 }
 
@@ -293,8 +282,7 @@ bool Volume::isMountpointMounted(const char *path) {
 }
 
 int Volume::mountVol() {
-    dev_t deviceNodes[MAX_PARTS];
-    dev_t diskdevice;
+    dev_t deviceNodes[4];
     int n, i, rc = 0;
     char errmsg[255];
 
@@ -306,9 +294,6 @@ int Volume::mountVol() {
     char decrypt_state[PROPERTY_VALUE_MAX];
     char crypto_state[PROPERTY_VALUE_MAX];
     char encrypt_progress[PROPERTY_VALUE_MAX];
-    int nParts = 0;
-    char devicePath[PATH_MAX];
-    int extendPart = -1;
 
     property_get("vold.decrypt", decrypt_state, "");
     property_get("vold.encrypt_progress", encrypt_progress, "");
@@ -341,11 +326,11 @@ int Volume::mountVol() {
         return 0;
     }
 
-    nParts = getDeviceNodes((dev_t *) &deviceNodes, MAX_PARTS);
-    if (!nParts)
-        n = 1;
-    else
-        n = nParts;
+    n = getDeviceNodes((dev_t *) &deviceNodes, 4);
+    if (!n) {
+        SLOGE("Failed to get device nodes (%s)\n", strerror(errno));
+        return -1;
+    }
 
     /* If we're running encrypted, and the volume is marked as encryptable and nonremovable,
      * and also marked as providing Asec storage, then we need to decrypt
@@ -396,19 +381,8 @@ int Volume::mountVol() {
         }
     }
 
-    /*
-     * Since we support multiple partitions, in case there is extend SD card
-     * partition, we need to skip this extend partition
-     */
-    diskdevice = getDiskDevice();
-    sprintf(devicePath, "/dev/block/vold/%d:%d", MAJOR(diskdevice),
-        MINOR(diskdevice));
-    extendPart = Fat::check_extend(devicePath, n);
-
     for (i = 0; i < n; i++) {
-
-        if (i == extendPart)
-            continue;
+        char devicePath[255];
 
         sprintf(devicePath, "/dev/block/vold/%d:%d", MAJOR(deviceNodes[i]),
                 MINOR(deviceNodes[i]));
@@ -416,12 +390,7 @@ int Volume::mountVol() {
         SLOGI("%s being considered for volume %s\n", devicePath, getLabel());
 
         errno = 0;
-
-        if ((getState() == Volume::State_NoMedia)) {
-            errno = ENODEV;
-            return -1;
-        } else
-            setState(Volume::State_Checking);
+        setState(Volume::State_Checking);
 
         if (Fat::check(devicePath)) {
             if (errno == ENODATA) {
@@ -431,10 +400,7 @@ int Volume::mountVol() {
             errno = EIO;
             /* Badness - abort the mount */
             SLOGE("%s failed FS checks (%s)", devicePath, strerror(errno));
-            if ((getState() == Volume::State_NoMedia))
-                errno = ENODEV;
-            else
-                setState(Volume::State_Idle);
+            setState(Volume::State_Idle);
             return -1;
         }
 
@@ -442,7 +408,7 @@ int Volume::mountVol() {
         int gid;
 
         if (Fat::doMount(devicePath, getMountpoint(), false, false, false,
-                AID_MEDIA_RW, AID_SDCARD_RW, 0007, true)) {
+                AID_MEDIA_RW, AID_MEDIA_RW, 0007, true)) {
             SLOGE("%s failed to mount via VFAT (%s)\n", devicePath, strerror(errno));
             continue;
         }
@@ -452,8 +418,7 @@ int Volume::mountVol() {
         if (providesAsec && mountAsecExternal() != 0) {
             SLOGE("Failed to mount secure area (%s)", strerror(errno));
             umount(getMountpoint());
-            if ((getState() != Volume::State_NoMedia))
-                setState(Volume::State_Idle);
+            setState(Volume::State_Idle);
             return -1;
         }
 
@@ -461,36 +426,13 @@ int Volume::mountVol() {
         snprintf(service, 64, "fuse_%s", getLabel());
         property_set("ctl.start", service);
 
-        /*
-         * If the actual block device is removed, unmount it from final mountpoint.
-         * Don't unmount the bindmount and tmpfs, because we don't use them now.
-         */
-        if (getState() == Volume::State_NoMedia) {
-            SLOGD("Maybe the device is removed?");
-            umount(getMountpoint());
-            errno = ENODEV;
-            return -1;
-        }
-
         setState(Volume::State_Mounted);
         mCurrentlyMountedKdev = deviceNodes[i];
-
-        /*
-         * When the "part" in vold.fstab is set as "auto", mPartIdx will be -1.
-         * And USB mass storage will export entire disk(all the partitions) to host PC.
-         * So update the mPartIdx to export only one proper FAT FS partition.
-         */
-        if (mPartIdx == -1 && nParts)
-            mPartIdx = i + 1;
-
         return 0;
     }
 
     SLOGE("Volume %s found no suitable devices for mounting :(\n", getLabel());
-    if ((getState() == Volume::State_NoMedia))
-        errno = ENODEV;
-    else
-        setState(Volume::State_Idle);
+    setState(Volume::State_Idle);
 
     return -1;
 }
@@ -551,16 +493,6 @@ int Volume::doUnmount(const char *path, bool force) {
         Process::killProcessesWithOpenFiles(path, action);
         usleep(1000*1000);
     }
-
-    sync();
-    /* perform a MNT_DETACH lazy unmount,
-     * in case that files are been deleting,
-     * and the user process cannot be found and killed by killProcessesWithOpenFiles. */
-    if (!umount2(path, MNT_DETACH) || errno == EINVAL || errno == ENOENT) {
-        SLOGI("%s sucessfully unmounted with MNT_DETACH flag", path);
-        return 0;
-    }
-
     errno = EBUSY;
     SLOGE("Giving up on unmount %s (%s)", path, strerror(errno));
     return -1;
@@ -616,11 +548,6 @@ int Volume::unmountVol(bool force, bool revert) {
         cryptfs_revert_volume(getLabel());
         revertDeviceInfo();
         SLOGI("Encrypted volume %s reverted successfully", getMountpoint());
-    }
-
-    if ((getState() == Volume::State_NoMedia)) {
-        mCurrentlyMountedKdev = -1;
-        goto out_nomedia;
     }
 
     setState(Volume::State_Idle);
