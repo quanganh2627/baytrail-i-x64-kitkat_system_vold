@@ -46,7 +46,7 @@ common_static_libraries := \
 #ARKHAM-952: add ess command to vold that
 #uses ecryptfs for container encryption
 ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
-ESS_LOCAL_PATH := vendor/intel/arkham/system/vold
+ESS_LOCAL_PATH := vendor/intel/PRIVATE/arkham/aosp/system/vold
 common_src_files += \
 	../../$(ESS_LOCAL_PATH)/ess.c \
 	../../$(ESS_LOCAL_PATH)/EssCmd.cpp
