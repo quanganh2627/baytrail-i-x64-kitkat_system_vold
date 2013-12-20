@@ -322,6 +322,15 @@ static void upgrade_crypt_ftr(int fd, struct crypt_mnt_ftr *crypt_ftr, off64_t o
         off64_t pdata_offset = offset + CRYPT_FOOTER_TO_PERSIST_OFFSET;
 
         SLOGW("upgrading crypto footer to 1.1");
+	/*
+	 * In the 1.2 crypto footer the 'spare2' member is where
+	 * master key begins with the 1.0 crypto footer.  So move the
+	 * master key to the 'master_key' member location in the
+	 * 'crypt_mnt_ftr' so decryption of the master key will be
+	 * successfull.  The salt is stored after the master key so it
+	 * is moved also.
+	 */
+	(void)memmove( crypt_ftr->master_key, &crypt_ftr->spare2, MAX_KEY_LEN + SALT_LEN );
 
         pdata = malloc(CRYPT_PERSIST_DATA_SIZE);
         if (pdata == NULL) {
