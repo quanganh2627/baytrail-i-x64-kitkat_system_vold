@@ -52,11 +52,6 @@ common_src_files += \
 	../../$(ESS_LOCAL_PATH)/EssCmd.cpp
 common_c_includes += \
 	$(ESS_LOCAL_PATH)
-ifeq ($(strip $(INTEL_FEATURE_ARKHAM_CHAABI)),true)
-CC54_LOCAL_PATH := vendor/intel/hardware/cc54/libcc54
-common_c_includes += \
-        $(CC54_LOCAL_PATH)/include/export
-endif
 endif
 
 include $(CLEAR_VARS)
@@ -75,10 +70,6 @@ LOCAL_MODULE_TAGS := eng tests
 
 ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
 LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM
-ifeq ($(strip $(INTEL_FEATURE_ARKHAM_CHAABI)),true)
-LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM_CHAABI
-LOCAL_STATIC_LIBRARIES += libdx_cc7_static
-endif
 endif
 
 include $(BUILD_STATIC_LIBRARY)
@@ -94,18 +85,13 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := $(common_c_includes)
 
 LOCAL_CFLAGS := -Werror=format
+ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
+LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM
+endif
 
 LOCAL_SHARED_LIBRARIES := $(common_shared_libraries)
 
 LOCAL_STATIC_LIBRARIES := $(common_static_libraries)
-
-ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
-LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM
-ifeq ($(strip $(INTEL_FEATURE_ARKHAM_CHAABI)),true)
-LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM_CHAABI
-LOCAL_SHARED_LIBRARIES += libdx_cc7
-endif
-endif
 
 include $(BUILD_EXECUTABLE)
 
