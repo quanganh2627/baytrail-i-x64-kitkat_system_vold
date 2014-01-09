@@ -46,12 +46,8 @@ common_static_libraries := \
 #ARKHAM-952: add ess command to vold that
 #uses ecryptfs for container encryption
 ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
-ESS_LOCAL_PATH := vendor/intel/PRIVATE/arkham/aosp/system/vold
-common_src_files += \
-	../../$(ESS_LOCAL_PATH)/ess.c \
-	../../$(ESS_LOCAL_PATH)/EssCmd.cpp
-common_c_includes += \
-	$(ESS_LOCAL_PATH)
+common_shared_libraries += libarkhamvold
+common_c_includes += $(TARGET_OUT_HEADERS)/libarkhamvold
 ifeq ($(strip $(INTEL_FEATURE_ARKHAM_CHAABI)),true)
 CC54_LOCAL_PATH := vendor/intel/hardware/cc54/libcc54
 common_c_includes += \
@@ -94,6 +90,9 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := $(common_c_includes)
 
 LOCAL_CFLAGS := -Werror=format
+ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
+LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM
+endif
 
 LOCAL_SHARED_LIBRARIES := $(common_shared_libraries)
 
@@ -120,5 +119,9 @@ LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
 LOCAL_CFLAGS := 
 
 LOCAL_SHARED_LIBRARIES := libcutils
+
+ifeq ($(strip $(INTEL_FEATURE_ARKHAM)),true)
+LOCAL_CFLAGS += -DINTEL_FEATURE_ARKHAM
+endif
 
 include $(BUILD_EXECUTABLE)
