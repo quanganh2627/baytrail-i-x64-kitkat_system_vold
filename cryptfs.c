@@ -50,6 +50,11 @@
 #include "VoldUtil.h"
 #include "crypto_scrypt.h"
 
+#ifdef TEE_SECURE_KEY
+/* Use a TEE to provide a Hardware backed key store to protect the encryption key */
+#include <tee_disk_enc.h>
+#endif
+
 #define DM_CRYPT_BUF_SIZE 4096
 #define DATA_MNT_POINT "/data"
 
@@ -1019,6 +1024,13 @@ static int create_encrypted_random_key(char *passwd, unsigned char *master_key, 
     read(fd, salt, SALT_LEN);
     close(fd);
 
+#ifdef TEE_SECURE_KEY
+    if (tee_create_disk_enc_key(key_buf)) {
+        SLOGW("failure creating TEE based secure key");
+        return -1;
+    }
+#endif
+
     /* Now encrypt it with the password */
     return encrypt_master_key(passwd, salt, key_buf, master_key, crypt_ftr);
 }
@@ -1247,6 +1259,13 @@ static int test_mount_encrypted_fs(char *passwd, char *mount_point, char *label)
       return -1;
     }
   }
+
+#ifdef TEE_SECURE_KEY
+    if (tee_verify_disk_enc_masterkey(decrypted_master_key)) {
+        SLOGE("Failed to verify master key\n");
+        return -1;
+    }
+#endif
 
   if (create_crypto_blk_dev(&crypt_ftr, decrypted_master_key,
                                real_blkdev, crypto_blkdev, label)) {
@@ -1780,7 +1799,12 @@ int cryptfs_enable(char *howarg, char *passwd)
         crypt_ftr.fs_size = nr_sec;
     }
     crypt_ftr.flags |= CRYPT_ENCRYPTION_IN_PROGRESS;
+
+#ifdef TEE_SECURE_KEY
+    strcpy((char *)crypt_ftr.crypto_type_name, "aes-xxx-essiv:sha256");
+#else
     strcpy((char *)crypt_ftr.crypto_type_name, "aes-cbc-essiv:sha256");
+#endif
 
     /* Make an encrypted master key */
     if (create_encrypted_random_key(passwd, crypt_ftr.master_key, crypt_ftr.salt, &crypt_ftr)) {

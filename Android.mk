@@ -106,6 +106,13 @@ LOCAL_SHARED_LIBRARIES += libdx_cc7
 endif
 endif
 
+#Perform teh disk encryption in the Chaabi TEE
+ifeq ($(strip $(USE_CHAABI_TEE_SECURE_KEY)),true)
+LOCAL_CFLAGS += -DTEE_SECURE_KEY
+LOCAL_SHARED_LIBRARIES += libdx_cc7
+endif
+
+
 include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)
