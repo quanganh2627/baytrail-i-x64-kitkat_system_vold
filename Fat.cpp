@@ -171,7 +171,7 @@ int Fat::doMount(const char *fsPath, const char *mountPoint,
 
 int Fat::format(const char *fsPath, unsigned int numSectors, bool wipe) {
     int fd;
-    const char *args[10];
+    const char *args[8];
     int rc;
     int status;
 
@@ -196,8 +196,7 @@ int Fat::format(const char *fsPath, unsigned int numSectors, bool wipe) {
                 false, true);
     } else {
         args[5] = fsPath;
-        args[6] = NULL;
-        rc = android_fork_execvp(8, (char **)args, &status, false,
+        rc = android_fork_execvp(6, (char **)args, &status, false,
                 true);
     }
 
