@@ -62,7 +62,7 @@
 #define EXT4_FS 1
 #define FAT_FS 2
 
-#define TABLE_LOAD_RETRIES 10
+#define TABLE_LOAD_RETRIES 20
 
 char *me = "cryptfs";
 
