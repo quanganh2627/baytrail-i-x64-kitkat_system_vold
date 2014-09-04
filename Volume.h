@@ -20,6 +20,8 @@
 #include <utils/List.h>
 #include <fs_mgr.h>
 
+#define MAX_PARTS 16
+
 class NetlinkEvent;
 class VolumeManager;
 

@@ -248,7 +248,7 @@ int Volume::formatVol(bool wipe) {
     }
 
     bool formatEntireDevice = (mPartIdx == -1);
-    char devicePath[255];
+    char devicePath[PATH_MAX];
     dev_t diskNode = getDiskDevice();
     dev_t partNode =
         MKDEV(MAJOR(diskNode),
@@ -266,6 +266,15 @@ int Volume::formatVol(bool wipe) {
             SLOGE("Failed to initialize MBR (%s)", strerror(errno));
             goto err;
         }
+        /*
+         * Partition lba will be changed, and vold will record the
+         * new minor/major. vold doesn't provide a sync mechanism
+         * and we also don't know what the major/minor should be.
+         * Waiting for 50ms is just an experience value.
+         */
+        usleep(1000*50);
+        getDeviceNodes((dev_t *)&diskNode, 1);
+        partNode = MKDEV(MAJOR(diskNode), MINOR(diskNode));
     }
 
     sprintf(devicePath, "/dev/block/vold/%d:%d",
@@ -315,7 +324,8 @@ bool Volume::isMountpointMounted(const char *path) {
 }
 
 int Volume::mountVol() {
-    dev_t deviceNodes[4];
+    dev_t deviceNodes[MAX_PARTS];
+    dev_t diskdevice;
     int n, i, rc = 0;
     char errmsg[255];
 
@@ -327,6 +337,9 @@ int Volume::mountVol() {
     char decrypt_state[PROPERTY_VALUE_MAX];
     char crypto_state[PROPERTY_VALUE_MAX];
     char encrypt_progress[PROPERTY_VALUE_MAX];
+    int nParts = 0;
+    char devicePath[PATH_MAX];
+    int extendPart = -1;
 
     property_get("vold.decrypt", decrypt_state, "");
     property_get("vold.encrypt_progress", encrypt_progress, "");
@@ -359,11 +372,11 @@ int Volume::mountVol() {
         return 0;
     }
 
-    n = getDeviceNodes((dev_t *) &deviceNodes, 4);
-    if (!n) {
-        SLOGE("Failed to get device nodes (%s)\n", strerror(errno));
-        return -1;
-    }
+    nParts = getDeviceNodes((dev_t *) &deviceNodes, MAX_PARTS);
+    if (!nParts)
+        n = 1;
+    else
+        n = nParts;
 
     /* If we're running encrypted, and the volume is marked as encryptable and nonremovable,
      * and also marked as providing Asec storage, then we need to decrypt
@@ -414,8 +427,19 @@ int Volume::mountVol() {
         }
     }
 
+    /*
+     * Since we support multiple partitions, in case there is extend SD card
+     * partition, we need to skip this extend partition
+     */
+    diskdevice = getDiskDevice();
+    sprintf(devicePath, "/dev/block/vold/%lu:%lu", (unsigned long)MAJOR(diskdevice),
+        (unsigned long)MINOR(diskdevice));
+    extendPart = Fat::check_extend(devicePath, n);
+
     for (i = 0; i < n; i++) {
-        char devicePath[255];
+
+        if (i == extendPart)
+            continue;
 
         sprintf(devicePath, "/dev/block/vold/%d:%d", major(deviceNodes[i]),
                 minor(deviceNodes[i]));
