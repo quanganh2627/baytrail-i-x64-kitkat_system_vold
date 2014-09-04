@@ -254,3 +254,38 @@ void Fat::wipe(const char *fsPath, unsigned int numSectors) {
         SLOGE("Fat wipe failed to open device %s", fsPath);
     }
 }
+
+int Fat::check_extend(const char *fsPath, unsigned int numParts)
+{
+    int n = numParts, i, fd;
+    unsigned char buf[512];
+    unsigned char *PartInfo;
+    int PartInfoOffset = 0x1be;
+    int sizeofPart = 16;
+
+    fd = open(fsPath, O_RDONLY);
+    if (fd < 0) {
+         /* Badness - abort the mount */
+         SLOGE("%s failed FS open (%s)", fsPath, strerror(errno));
+         return -1;
+    }
+
+    if (read(fd, buf, 512) < 0) {
+        /* Badness - abort the mount */
+        SLOGE("%s failed MBR read (%s)", fsPath, strerror(errno));
+        close(fd);
+        return -1;
+    }
+    close(fd);
+
+    PartInfo = buf + PartInfoOffset;
+
+    for (i = 0; i < n; i++, PartInfo += sizeofPart) {
+        if (PartInfo[4] == 5) {
+            SLOGW("%s This is an Extend Partition, skip to next one, n is %d\n", fsPath, i);
+            return i;
+        }
+    }
+
+    return -1;
+}
