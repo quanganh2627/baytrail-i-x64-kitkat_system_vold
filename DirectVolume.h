@@ -26,9 +26,13 @@ public:
 	PathInfo(const char *pattern);
 	~PathInfo();
 	bool match(const char *path);
+	bool iswildcard() { return !warned; };
+        const char *getdevicepath() { return devicepath; }
+        void setdevicepath(const char *path);
 private:
 	bool warned;
 	char *pattern;
+	char *devicepath;
 	enum PatternType { prefix, wildcard };
 	PatternType patternType;
 };

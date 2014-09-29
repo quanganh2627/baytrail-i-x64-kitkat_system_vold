@@ -38,6 +38,7 @@ PathInfo::PathInfo(const char *p)
 {
     warned = false;
     pattern = strdup(p);
+    devicepath = strdup("\0");
 
     if (!strchr(pattern, '*')) {
         patternType = prefix;
@@ -49,6 +50,7 @@ PathInfo::PathInfo(const char *p)
 PathInfo::~PathInfo()
 {
     free(pattern);
+    free(devicepath);
 }
 
 bool PathInfo::match(const char *path)
@@ -70,6 +72,14 @@ bool PathInfo::match(const char *path)
     return false;
 }
 
+void PathInfo::setdevicepath(const char *path)
+{
+    if (path != NULL) {
+        if (devicepath != NULL)
+            free(devicepath);
+        devicepath = strdup(path);
+    }
+}
 DirectVolume::DirectVolume(VolumeManager *vm, const fstab_rec* rec, int flags) :
         Volume(vm, rec, flags) {
     mPaths = new PathCollection();
@@ -139,7 +149,19 @@ int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
             int action = evt->getAction();
             const char *devtype = evt->findParam("DEVTYPE");
 
+            /* check if the envent belong to us since wildcard is used. */
+            if ((*it)->iswildcard() && !strstr(dp, (*it)->getdevicepath())) {
+                errno = ENODEV;
+                return -1;
+            }
+
             if (action == NetlinkEvent::NlActionAdd) {
+
+                /* saving device path if it's in wildcard mode */
+                if ((*it)->iswildcard() && strcmp((*it)->getdevicepath(), "\0") == 0) {
+                    char *pos = strstr(dp, "/block/");
+                    (*it)->setdevicepath(pos);
+                }
                 int major = atoi(evt->findParam("MAJOR"));
                 int minor = atoi(evt->findParam("MINOR"));
                 char nodepath[255];
@@ -168,6 +190,10 @@ int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
                 }
             } else if (action == NetlinkEvent::NlActionRemove) {
                 if (!strcmp(devtype, "disk")) {
+                    /* clean up  device path if it's in wildcard mode */
+                    if ((*it)->iswildcard() && strstr(dp, (*it)->getdevicepath())) {
+                        (*it)->setdevicepath("\0");
+                    }
                     handleDiskRemoved(dp, evt);
                 } else {
                     handlePartitionRemoved(dp, evt);
