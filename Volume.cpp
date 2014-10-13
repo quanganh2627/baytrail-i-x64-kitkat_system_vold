@@ -481,6 +481,10 @@ int Volume::mountVol() {
 
         setState(Volume::State_Mounted);
         mCurrentlyMountedKdev = deviceNodes[i];
+
+        if (mPartIdx == -1)
+            mPartIdx = i + 1;
+
         return 0;
     }
 
