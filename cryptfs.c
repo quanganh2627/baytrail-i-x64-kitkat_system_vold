@@ -1683,10 +1683,13 @@ int cryptfs_enable(char *howarg, char *passwd)
         }
     }
 
+    sleep(5);
+
     /* The init files are setup to stop the class main and late start when
      * vold sets trigger_shutdown_framework.
      */
     property_set("vold.decrypt", "trigger_shutdown_framework");
+    sleep(5);
     SLOGD("Just asked init to shut down class main\n");
 
     if (vold_unmountAllAsecs()) {
