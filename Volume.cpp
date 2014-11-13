@@ -432,8 +432,8 @@ int Volume::mountVol() {
      * partition, we need to skip this extend partition
      */
     diskdevice = getDiskDevice();
-    sprintf(devicePath, "/dev/block/vold/%d:%d", MAJOR(diskdevice),
-        MINOR(diskdevice));
+    sprintf(devicePath, "/dev/block/vold/%lu:%lu", (unsigned long)MAJOR(diskdevice),
+        (unsigned long)MINOR(diskdevice));
     extendPart = Fat::check_extend(devicePath, n);
 
     for (i = 0; i < n; i++) {
