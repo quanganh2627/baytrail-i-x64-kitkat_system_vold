@@ -55,6 +55,11 @@ PathInfo::~PathInfo()
 
 bool PathInfo::match(const char *path)
 {
+    if (!path) {
+        SLOGE("Input parameter path is NULL.");
+        return false;
+    }
+
     switch (patternType) {
     case prefix:
     {
@@ -141,6 +146,11 @@ void DirectVolume::handleVolumeUnshared() {
 
 int DirectVolume::handleBlockEvent(NetlinkEvent *evt) {
     const char *dp = evt->findParam("DEVPATH");
+    if (!dp) {
+        SLOGW("No device path found in netlink event.");
+        errno = ENODEV;
+        return -1;
+    }
 
     PathCollection::iterator  it;
     for (it = mPaths->begin(); it != mPaths->end(); ++it) {
