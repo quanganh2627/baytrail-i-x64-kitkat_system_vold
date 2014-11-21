@@ -257,6 +257,7 @@ int Volume::formatVol(bool wipe) {
     setState(Volume::State_Formatting);
 
     int ret = -1;
+    SLOGE("=====================mPartIdx: %d\n", mPartIdx);
     // Only initialize the MBR if we are formatting the entire device
     if (formatEntireDevice) {
         sprintf(devicePath, "/dev/block/vold/%d:%d",
@@ -319,7 +320,7 @@ int Volume::mountVol() {
 
     int flags = getFlags();
     bool providesAsec = (flags & VOL_PROVIDES_ASEC) != 0;
-
+    int nparts = 0;
     // TODO: handle "bind" style mounts, for emulated storage
 
     char decrypt_state[PROPERTY_VALUE_MAX];
@@ -357,12 +358,12 @@ int Volume::mountVol() {
         return 0;
     }
 
-    n = getDeviceNodes((dev_t *) &deviceNodes, 4);
-    if (!n) {
-        SLOGE("Failed to get device nodes (%s)\n", strerror(errno));
-        return -1;
-    }
-
+    nparts = getDeviceNodes((dev_t *) &deviceNodes, 4);
+    SLOGE("-----------------nparts: %d\n", nparts);
+    if (!nparts)
+	    n = 1;
+    else
+	    n = nparts;
     /* If we're running encrypted, and the volume is marked as encryptable and nonremovable,
      * and also marked as providing Asec storage, then we need to decrypt
      * that partition, and update the volume object to point to it's new decrypted
@@ -459,6 +460,13 @@ int Volume::mountVol() {
 
         setState(Volume::State_Mounted);
         mCurrentlyMountedKdev = deviceNodes[i];
+        /*
+         * When the "part" in vold.fstab is set as "auto", mPartIdx will be -1.
+         * And USB mass storage will export entire disk(all the partitions) to host PC.
+         * So update the mPartIdx to export only one proper FAT FS partition.
+         */
+        if (mPartIdx == -1 && nparts)
+            mPartIdx = i + 1;
         return 0;
     }
 
