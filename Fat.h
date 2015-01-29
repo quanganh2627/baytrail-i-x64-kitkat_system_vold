@@ -27,10 +27,10 @@ public:
                        int ownerUid, int ownerGid, int permMask,
                        bool createLost);
     static int check_extend(const char *fsPath, unsigned int numParts);
-    static int format(const char *fsPath, unsigned int numSectors, bool wipe);
+    static int format(const char *fsPath, unsigned long numSectors, bool wipe);
 
 private:
-    static void wipe(const char *fsPath, unsigned int numSectors);
+    static void wipe(const char *fsPath, unsigned long numSectors);
 };
 
 #endif
