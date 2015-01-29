@@ -120,7 +120,8 @@ static int setupLoopDevice(char* buffer, size_t len, const char* asecFileName, c
     return 0;
 }
 
-static int setupDevMapperDevice(char* buffer, size_t len, const char* loopDevice, const char* asecFileName, const char* key, const char* idHash , int numImgSectors, bool* createdDMDevice, bool debug) {
+static int setupDevMapperDevice(char* buffer, size_t len, const char* loopDevice, const char* asecFileName,
+	const char* key, const char* idHash , unsigned long numImgSectors, bool* createdDMDevice, bool debug) {
     if (strcmp(key, "none")) {
         if (Devmapper::lookupActive(idHash, buffer, len)) {
             if (Devmapper::create(idHash, loopDevice, key, numImgSectors,
@@ -756,7 +757,7 @@ int VolumeManager::finalizeAsec(const char *id) {
         return -1;
     }
 
-    unsigned int nr_sec = 0;
+    unsigned long nr_sec = 0;
     struct asec_superblock sb;
 
     if (Loop::lookupInfo(loopDevice, &sb, &nr_sec)) {
@@ -819,7 +820,7 @@ int VolumeManager::fixupAsecPermissions(const char *id, gid_t gid, const char* f
         return -1;
     }
 
-    unsigned int nr_sec = 0;
+    unsigned long nr_sec = 0;
     struct asec_superblock sb;
 
     if (Loop::lookupInfo(loopDevice, &sb, &nr_sec)) {
@@ -1298,7 +1299,7 @@ int VolumeManager::mountAsec(const char *id, const char *key, int ownerUid, bool
     char dmDevice[255];
     bool cleanupDm = false;
     int fd;
-    unsigned int nr_sec = 0;
+    unsigned long nr_sec = 0;
     struct asec_superblock sb;
 
     if (Loop::lookupInfo(loopDevice, &sb, &nr_sec)) {

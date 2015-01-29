@@ -429,7 +429,7 @@ static int get_crypt_ftr_info(char **metadata_fname, off64_t *off)
   int fd;
   char key_loc[PROPERTY_VALUE_MAX];
   char real_blkdev[PROPERTY_VALUE_MAX];
-  unsigned int nr_sec;
+  unsigned long nr_sec;
   int rc = -1;
 
   if (!cached_data) {
@@ -1902,7 +1902,8 @@ int cryptfs_setup_volume(const char *label, int major, int minor,
     char real_blkdev[MAXPATHLEN], crypto_blkdev[MAXPATHLEN];
     struct crypt_mnt_ftr sd_crypt_ftr;
     struct stat statbuf;
-    int nr_sec, fd;
+    unsigned long nr_sec;
+    int fd;
 
     sprintf(real_blkdev, "/dev/block/vold/%d:%d", major, minor);
 
@@ -2983,7 +2984,7 @@ int cryptfs_enable_internal(char *howarg, int crypt_type, char *passwd,
 
     /* If doing inplace encryption, make sure the orig fs doesn't include the crypto footer */
     if ((how == CRYPTO_ENABLE_INPLACE) && (!strcmp(key_loc, KEY_IN_FOOTER))) {
-        unsigned int fs_size_sec, max_fs_size_sec;
+        unsigned long fs_size_sec, max_fs_size_sec;
         fs_size_sec = get_fs_size(real_blkdev);
         if (fs_size_sec == 0)
             fs_size_sec = get_f2fs_filesystem_size_sec(real_blkdev);

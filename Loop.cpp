@@ -277,7 +277,7 @@ int Loop::resizeImageFile(const char *file, unsigned int numSectors) {
     return 0;
 }
 
-int Loop::lookupInfo(const char *loopDevice, struct asec_superblock *sb, unsigned int *nr_sec) {
+int Loop::lookupInfo(const char *loopDevice, struct asec_superblock *sb, unsigned long *nr_sec) {
     int fd;
     struct asec_superblock buffer;
 

@@ -169,7 +169,7 @@ int Fat::doMount(const char *fsPath, const char *mountPoint,
     return rc;
 }
 
-int Fat::format(const char *fsPath, unsigned int numSectors, bool wipe) {
+int Fat::format(const char *fsPath, unsigned long numSectors, bool wipe) {
     int fd;
     const char *args[11];
     int rc;
@@ -190,7 +190,7 @@ int Fat::format(const char *fsPath, unsigned int numSectors, bool wipe) {
 
     if (numSectors) {
         char tmp[32];
-        snprintf(tmp, sizeof(tmp), "%u", numSectors);
+        snprintf(tmp, sizeof(tmp), "%lu", numSectors);
         const char *size = tmp;
         args[8] = "-s";
         args[9] = size;
@@ -228,7 +228,7 @@ int Fat::format(const char *fsPath, unsigned int numSectors, bool wipe) {
     return 0;
 }
 
-void Fat::wipe(const char *fsPath, unsigned int numSectors) {
+void Fat::wipe(const char *fsPath, unsigned long numSectors) {
     int fd;
     unsigned long long range[2];
 
